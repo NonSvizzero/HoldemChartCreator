@@ -2,14 +2,14 @@ import json
 from tkinter import *
 from tkinter.colorchooser import askcolor
 from tkinter.filedialog import askopenfile, asksaveasfile
-from PIL import ImageTk
 from HoldemChartCreator.hands import hands
+from HoldemChartCreator.draw import create_chart
 
 DEFAULT_BG = "#e5e5e5"
 DEFAULT_FG = "#000000"
 DEFAULT_PICKER_COLOR = "#66ff66"
-DEFAULT_OUTPUT_WIDTH = 256
-DEFAULT_OUTPUT_HEIGHT = 256
+DEFAULT_OUTPUT_WIDTH = 512
+DEFAULT_OUTPUT_HEIGHT = 512
 
 
 class Cell(Button):
@@ -41,7 +41,6 @@ class Cell(Button):
 
 
 class Chart(Frame):
-    # todo insert range percentage calculator
     def __init__(self, master=None, toolbox=None, **kw):
         super().__init__(master=master, background='black', **kw)
         self.buttons = tuple(tuple(Cell(self, hand, bg=DEFAULT_BG, fg=DEFAULT_FG) for hand in row) for row in hands)
@@ -88,6 +87,19 @@ class Chart(Frame):
                 button.reset()
         self.toolbox.combo_counter.update_counter()
 
+    def preview_chart(self):
+        img = create_chart(int(self.toolbox.width.var.get()), int(self.toolbox.height.var.get()), self.to_dict())
+        img.show()
+
+    def save_chart(self):
+        img = create_chart(int(self.toolbox.width.var.get()), int(self.toolbox.height.var.get()), self.to_dict())
+        f = asksaveasfile(mode='wb', defaultextension='png')
+        if f is None:
+            return
+        img.save(f)
+        f.close()
+
+
     def to_dict(self):
         return [[{"fg": button['fg'], "bg": button['bg']} for button in row] for row in self.buttons]
 
@@ -132,7 +144,7 @@ class ModeSelector(Frame):
         super().__init__(master=master, **kw)
         self.mode = IntVar()  # 0 = cell, 1 = flag, 2 = clear
         self.r1 = Radiobutton(self, text='Cell', variable=self.mode, value=0)
-        self.r2 = Radiobutton(self, text='Flag', variable=self.mode, value=1)
+        self.r2 = Radiobutton(self, text='Text', variable=self.mode, value=1)
         self.r3 = Radiobutton(self, text='Clear', variable=self.mode, value=2)
 
     def pack(self, **kw):
@@ -195,12 +207,15 @@ class Toolbox(Frame):
         self.file_handler = FileHandler(self)
         self.width = LabeledEntry(self, "Width: ", DEFAULT_OUTPUT_WIDTH)
         self.height = LabeledEntry(self, "Height: ", DEFAULT_OUTPUT_HEIGHT)
-        self.export_button = Button(self, text="Export Image")
+        self.export_button = Button(self, text="Preview")
+        self.save_button = Button(self, text="Export PNG")
 
     def bind_widgets(self, chart):
         self.combo_counter.chart = chart
         self.combo_counter.update_counter()
         self.reset_button.configure(command=chart.reset)
+        self.export_button.configure(command=chart.preview_chart)
+        self.save_button.configure(command=chart.save_chart)
         self.file_handler.chart = chart
 
     def pack(self, **kw):
@@ -214,7 +229,7 @@ class Toolbox(Frame):
         self.width.pack()
         self.height.pack()
         self.export_button.pack(fill=X)
-
+        self.save_button.pack(fill=X)
 
 
 def main():
