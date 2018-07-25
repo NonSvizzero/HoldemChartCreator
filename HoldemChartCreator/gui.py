@@ -7,12 +7,21 @@ from HoldemChartCreator.hands import hands
 
 DEFAULT_BG = "#e5e5e5"
 DEFAULT_FG = "#000000"
+DEFAULT_PICKER_COLOR = "#66ff66"
+DEFAULT_OUTPUT_WIDTH = 256
+DEFAULT_OUTPUT_HEIGHT = 256
 
 
 class Cell(Button):
     def __init__(self, master=None, text='XX', **kw):
-        super().__init__(master=master, text=text, width=3, relief=SUNKEN, bd=0, padx=2, pady=2, **kw)
+        super().__init__(master=master, text=text, width=3, relief=SUNKEN, state=DISABLED, bd=0, padx=2, pady=2, **kw)
         self.changed = False
+        if 's' in text:
+            self.combos = 4
+        elif 'o' in text:
+            self.combos = 12
+        else:
+            self.combos = 6
 
     def mouse_up(self):
         self.changed = False
@@ -20,26 +29,24 @@ class Cell(Button):
     def mouse_over(self, mode, bg_color, fg_color):
         if not self.changed:
             if mode == 0:
-                self.configure(bg=bg_color)
+                self.configure(bg=bg_color, state=NORMAL)
             elif mode == 1:
-                self.configure(fg=fg_color)
+                self.configure(fg=fg_color, state=NORMAL)
             else:
                 self.reset()
         self.changed = True
 
     def reset(self):
-        self.configure(bg=DEFAULT_BG, fg=DEFAULT_FG)
+        self.configure(bg=DEFAULT_BG, fg=DEFAULT_FG, state=DISABLED)
 
 
 class Chart(Frame):
-    #todo insert range percentage calculator
-    def __init__(self, master=None, mode_selector=None, cell_picker=None, text_picker=None, **kw):
+    # todo insert range percentage calculator
+    def __init__(self, master=None, toolbox=None, **kw):
         super().__init__(master=master, background='black', **kw)
         self.buttons = tuple(tuple(Cell(self, hand, bg=DEFAULT_BG, fg=DEFAULT_FG) for hand in row) for row in hands)
         self.mouse_pressed = False
-        self.mode_selector = mode_selector
-        self.cell_picker = cell_picker
-        self.text_picker = text_picker
+        self.toolbox = toolbox
         self.bind_all("<Button-1>", self.mouse_down)
         self.bind_all("<ButtonRelease-1>", self.mouse_up)
         self.bind_all("<B1-Motion>", self.mouse_motion)
@@ -49,6 +56,9 @@ class Chart(Frame):
         for i, row in enumerate(self.buttons):
             for j, button in enumerate(row):
                 button.grid(row=i, column=j, padx=1, pady=1)
+
+    def count_combos(self):
+        return sum(button.combos * (1 if button['state'] == NORMAL else 0) for row in self.buttons for button in row)
 
     def mouse_down(self, e):
         self.mouse_pressed = True
@@ -68,12 +78,15 @@ class Chart(Frame):
         for row in self.buttons:
             for button in row:
                 if self.winfo_containing(e.x_root, e.y_root) is button:
-                    button.mouse_over(self.mode_selector.mode.get(), self.cell_picker['bg'], self.text_picker['bg'])
+                    button.mouse_over(self.toolbox.mode_selector.mode.get(), self.toolbox.cell_picker.button['bg'],
+                                      self.toolbox.text_picker.button['bg'])
+                    self.toolbox.combo_counter.update_counter()
 
     def reset(self):
         for row in self.buttons:
             for button in row:
                 button.reset()
+        self.toolbox.combo_counter.update_counter()
 
     def to_dict(self):
         return [[{"fg": button['fg'], "bg": button['bg']} for button in row] for row in self.buttons]
@@ -81,7 +94,21 @@ class Chart(Frame):
     def load_colors(self, colors):
         for i, row in enumerate(colors):
             for j, color in enumerate(row):
-                self.buttons[i][j].configure(bg=color['bg'], fg=color['fg'])
+                self.buttons[i][j].configure(bg=color['bg'], fg=color['fg'],
+                                             state=DISABLED if color['bg'] == DEFAULT_BG else NORMAL)
+        self.toolbox.combo_counter.update_counter()
+
+
+class ComboCounter(Label):
+    def __init__(self, master=None, **kw):
+        super().__init__(master=master, **kw)
+        self.counter = StringVar(self)
+        self['textvariable'] = self.counter
+        self.chart = None
+
+    def update_counter(self):
+        combos = self.chart.count_combos()
+        self.counter.set(f"Selected: {combos / 1326 * 100 :.2f}% ({combos} / 1326)")
 
 
 class ColorPicker(Frame):
@@ -142,24 +169,64 @@ class FileHandler(Frame):
         self.save_button.pack(side=LEFT, fill=X)
         self.load_button.pack(side=RIGHT, fill=X)
 
+
+class LabeledEntry(Frame):
+    def __init__(self, master=None, text="Text", value=0, **kw):
+        super().__init__(master=master, **kw)
+        self.label = Label(self, text=text)
+        self.var = StringVar(self)
+        self.entry = Entry(self, textvariable=self.var)
+        self.var.set(value)
+
+    def pack(self, **kw):
+        super().pack(**kw)
+        self.label.pack(side=LEFT)
+        self.entry.pack(side=LEFT)
+
+
+class Toolbox(Frame):
+    def __init__(self, master=None, **kw):
+        super().__init__(master=master, **kw)
+        self.combo_counter = ComboCounter(self)
+        self.cell_picker = ColorPicker(self, "Cell Color:", DEFAULT_PICKER_COLOR)
+        self.text_picker = ColorPicker(self, "Text Color:", DEFAULT_FG)
+        self.mode_selector = ModeSelector(self)
+        self.reset_button = Button(self, text="Reset chart")
+        self.file_handler = FileHandler(self)
+        self.width = LabeledEntry(self, "Width: ", DEFAULT_OUTPUT_WIDTH)
+        self.height = LabeledEntry(self, "Height: ", DEFAULT_OUTPUT_HEIGHT)
+        self.export_button = Button(self, text="Export Image")
+
+    def bind_widgets(self, chart):
+        self.combo_counter.chart = chart
+        self.combo_counter.update_counter()
+        self.reset_button.configure(command=chart.reset)
+        self.file_handler.chart = chart
+
+    def pack(self, **kw):
+        super().pack(**kw)
+        self.combo_counter.pack(fill=X)
+        self.cell_picker.pack(fill=X)
+        self.text_picker.pack(fill=X)
+        self.mode_selector.pack(fill=X)
+        self.reset_button.pack(fill=X)
+        self.file_handler.pack(fill=X)
+        self.width.pack()
+        self.height.pack()
+        self.export_button.pack(fill=X)
+
+
+
 def main():
     # WIDGETS
     root = Tk()
-    tools = Frame(root)
-    cell_picker = ColorPicker(tools, "Cell Color:", DEFAULT_BG)
-    text_picker = ColorPicker(tools, "Text Color:", DEFAULT_FG)
-    mode_selector = ModeSelector(tools)
-    chart = Chart(root, mode_selector, cell_picker.button, text_picker.button)
-    reset_button = Button(tools, text="Reset chart", command=chart.reset)
-    file_handler = FileHandler(tools, chart)
+    tools = Toolbox(root)
+    chart = Chart(root, tools)
+    tools.bind_widgets(chart)
     # GEOMETRY
     chart.pack(side=LEFT)
     tools.pack(side=RIGHT)
-    cell_picker.pack(fill=X)
-    text_picker.pack(fill=X)
-    mode_selector.pack(fill=X)
-    reset_button.pack(fill=X)
-    file_handler.pack(fill=X)
+
     root.mainloop()
 
 
