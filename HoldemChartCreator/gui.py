@@ -120,14 +120,18 @@ class ComboCounter(Label):
 
     def update_counter(self):
         combos = self.chart.count_combos()
-        self.counter.set(f"Selected: {combos / 1326 * 100 :.2f}% ({combos} / 1326)")
+        self.counter.set(f"{combos / 1326 * 100 :.2f}% ({combos} / 1326)")
 
 
 class ColorPicker(Frame):
-    def __init__(self, master=None, label='Label', color='white', **kw):
+    def __init__(self, master=None, text='Range', color='white', **kw):
         super().__init__(master=master, **kw)
-        self.label = Label(self, text=label, width=9)
+        self.var = StringVar(self)
+        self.entry = Entry(self, textvariable=self.var)
+        self.var.set(text)
         self.button = Button(self, command=self.pick_color, bg=color, relief=SUNKEN, width=8)
+        self.counter = ComboCounter(self)
+        self.delete_button = Button(self, command=self.delete, text='-')
 
     def pick_color(self):
         (RGB, hex) = askcolor()
@@ -135,24 +139,44 @@ class ColorPicker(Frame):
 
     def pack(self, **kw):
         super().pack(**kw)
-        self.label.pack(side=LEFT)
+        self.entry.pack(side=LEFT)
         self.button.pack(side=LEFT, fill=X)
+        self.counter.pack(side=LEFT)
+        self.delete_button.pack(side=LEFT, fill=X)
 
+    def delete(self):
+        self.master.remove_range(self)
 
-class ModeSelector(Frame):
+class RangeBox(Frame):
+    COLORS = ["#D10ECF", "#D71042", "#DB7412", "#B3E014", "#1EE516", "#1992EF", "#411BF4"]
+
     def __init__(self, master=None, **kw):
         super().__init__(master=master, **kw)
-        self.mode = IntVar()  # 0 = cell, 1 = flag, 2 = clear
-        self.r1 = Radiobutton(self, text='Cell', variable=self.mode, value=0)
-        self.r2 = Radiobutton(self, text='Text', variable=self.mode, value=1)
-        self.r3 = Radiobutton(self, text='Clear', variable=self.mode, value=2)
+        self.ranges= []
+
+    def add_range(self):
+        i = len(self.ranges)
+        self.ranges.append(ColorPicker(master=self, text=f"Range #{i+1}", color=self.COLORS[i % len(self.COLORS)]))
+        self.ranges[-1].pack()
+
+    def remove_range(self, range):
+        range.destroy()
+        self.ranges.remove(range)
 
     def pack(self, **kw):
         super().pack(**kw)
-        self.r1.pack(side=LEFT)
-        self.r2.pack(side=LEFT)
-        self.r3.pack(side=LEFT)
+        self.add_range()
 
+class RangeContainer(Frame):
+    def __init__(self, master=None, **kw):
+        super().__init__(master=master, **kw)
+        self.box = RangeBox(master=self)
+        self.add_button = Button(self, command=self.box.add_range, text='New Range')
+
+    def pack(self, **kw):
+        super().pack(**kw)
+        self.box.pack()
+        self.add_button.pack(fill=X)
 
 class FileHandler(Frame):
     def __init__(self, master=None, chart=None, **kw):
@@ -199,10 +223,7 @@ class LabeledEntry(Frame):
 class Toolbox(Frame):
     def __init__(self, master=None, **kw):
         super().__init__(master=master, **kw)
-        self.combo_counter = ComboCounter(self)
-        self.cell_picker = ColorPicker(self, "Cell Color:", DEFAULT_PICKER_COLOR)
-        self.text_picker = ColorPicker(self, "Text Color:", DEFAULT_FG)
-        self.mode_selector = ModeSelector(self)
+        self.range_container = RangeContainer(self)
         self.reset_button = Button(self, text="Reset chart")
         self.file_handler = FileHandler(self)
         self.width = LabeledEntry(self, "Width: ", DEFAULT_OUTPUT_WIDTH)
@@ -211,8 +232,6 @@ class Toolbox(Frame):
         self.save_button = Button(self, text="Export PNG")
 
     def bind_widgets(self, chart):
-        self.combo_counter.chart = chart
-        self.combo_counter.update_counter()
         self.reset_button.configure(command=chart.reset)
         self.export_button.configure(command=chart.preview_chart)
         self.save_button.configure(command=chart.save_chart)
@@ -220,10 +239,7 @@ class Toolbox(Frame):
 
     def pack(self, **kw):
         super().pack(**kw)
-        self.combo_counter.pack(fill=X)
-        self.cell_picker.pack(fill=X)
-        self.text_picker.pack(fill=X)
-        self.mode_selector.pack(fill=X)
+        self.range_container.pack(fill=X)
         self.reset_button.pack(fill=X)
         self.file_handler.pack(fill=X)
         self.width.pack()
