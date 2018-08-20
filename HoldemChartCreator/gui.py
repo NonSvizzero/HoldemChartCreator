@@ -5,9 +5,8 @@ from tkinter.filedialog import askopenfile, asksaveasfile
 from HoldemChartCreator.hands import hands
 from HoldemChartCreator.draw import create_chart
 
-DEFAULT_BG = "#e5e5e5"
+DEFAULT_BG = "#c5bd96"
 DEFAULT_FG = "#000000"
-DEFAULT_PICKER_COLOR = "#66ff66"
 DEFAULT_OUTPUT_WIDTH = 512
 DEFAULT_OUTPUT_HEIGHT = 512
 
@@ -43,7 +42,7 @@ class Cell(Button):
 class Chart(Frame):
     def __init__(self, master=None, toolbox=None, **kw):
         super().__init__(master=master, background='black', **kw)
-        self.buttons = tuple(tuple(Cell(self, hand, bg=DEFAULT_BG, fg=DEFAULT_FG) for hand in row) for row in hands)
+        self.cells = tuple(tuple(Cell(self, hand, bg=DEFAULT_BG, fg=DEFAULT_FG) for hand in row) for row in hands)
         self.mouse_pressed = False
         self.toolbox = toolbox
         self.bind_all("<Button-1>", self.mouse_down)
@@ -52,39 +51,43 @@ class Chart(Frame):
 
     def pack(self, **kw):
         super().pack(**kw)
-        for i, row in enumerate(self.buttons):
+        for i, row in enumerate(self.cells):
             for j, button in enumerate(row):
                 button.grid(row=i, column=j, padx=1, pady=1)
 
-    def count_combos(self):
-        return sum(button.combos * (1 if button['state'] == NORMAL else 0) for row in self.buttons for button in row)
+    def count_combos(self, color):
+        return sum(cell.combos * (1 if cell['background'] == color else 0) for row in self.cells for cell in row)
+
+    def update_color(self, old, new):
+        for row in self.cells:
+            for cell in row:
+                if cell['background'] == old:
+                    cell.configure(bg=new)
 
     def mouse_down(self, e):
         self.mouse_pressed = True
-        self.update_containing_button(e)
+        self.update_containing_cell(e)
 
     def mouse_up(self, e):
         self.mouse_pressed = False
-        for row in self.buttons:
-            for button in row:
-                button.mouse_up()
+        for row in self.cells:
+            for cell in row:
+                cell.mouse_up()
 
     def mouse_motion(self, e):
         if self.mouse_pressed:
-            self.update_containing_button(e)
+            self.update_containing_cell(e)
 
-    def update_containing_button(self, e):
-        for row in self.buttons:
-            for button in row:
-                if self.winfo_containing(e.x_root, e.y_root) is button:
-                    button.mouse_over(self.toolbox.mode_selector.mode.get(), self.toolbox.cell_picker.button['bg'],
-                                      self.toolbox.text_picker.button['bg'])
-                    self.toolbox.combo_counter.update_counter()
+    def update_containing_cell(self, e):
+        for row in self.cells:
+            for cell in row:
+                if self.winfo_containing(e.x_root, e.y_root) is cell:
+                    pass  # todo
 
     def reset(self):
-        for row in self.buttons:
-            for button in row:
-                button.reset()
+        for row in self.cells:
+            for cell in row:
+                cell.reset()
         self.toolbox.combo_counter.update_counter()
 
     def preview_chart(self):
@@ -101,13 +104,13 @@ class Chart(Frame):
 
 
     def to_dict(self):
-        return [[{"fg": button['fg'], "bg": button['bg']} for button in row] for row in self.buttons]
+        return [[{"fg": cell['fg'], "bg": cell['bg']} for cell in row] for row in self.cells]
 
     def load_colors(self, colors):
         for i, row in enumerate(colors):
             for j, color in enumerate(row):
-                self.buttons[i][j].configure(bg=color['bg'], fg=color['fg'],
-                                             state=DISABLED if color['bg'] == DEFAULT_BG else NORMAL)
+                self.cells[i][j].configure(bg=color['bg'], fg=color['fg'],
+                                           state=DISABLED if color['bg'] == DEFAULT_BG else NORMAL)
         self.toolbox.combo_counter.update_counter()
 
 
@@ -119,7 +122,7 @@ class ComboCounter(Label):
         self.chart = None
 
     def update_counter(self):
-        combos = self.chart.count_combos()
+        combos = self.master.count_combos()
         self.counter.set(f"{combos / 1326 * 100 :.2f}% ({combos} / 1326)")
 
 
@@ -137,6 +140,9 @@ class ColorPicker(Frame):
         (RGB, hex) = askcolor()
         self.button.configure(bg=hex)
 
+    def count_combos(self):
+        self.master.count_combos(self.button['background'])
+
     def pack(self, **kw):
         super().pack(**kw)
         self.entry.pack(side=LEFT)
@@ -150,8 +156,9 @@ class ColorPicker(Frame):
 class RangeBox(Frame):
     COLORS = ["#D10ECF", "#D71042", "#DB7412", "#B3E014", "#1EE516", "#1992EF", "#411BF4"]
 
-    def __init__(self, master=None, **kw):
+    def __init__(self, master=None, chart=None, **kw):
         super().__init__(master=master, **kw)
+        self.chart = chart
         self.ranges= []
 
     def add_range(self):
@@ -163,14 +170,20 @@ class RangeBox(Frame):
         range.destroy()
         self.ranges.remove(range)
 
+    def count_combos(self, color):
+        self.chart.count_combos(color)
+
+    def update_color(self, old, new):
+        self.chart.update_color(old, new)
+
     def pack(self, **kw):
         super().pack(**kw)
         self.add_range()
 
 class RangeContainer(Frame):
-    def __init__(self, master=None, **kw):
+    def __init__(self, master=None, chart=None, **kw):
         super().__init__(master=master, **kw)
-        self.box = RangeBox(master=self)
+        self.box = RangeBox(self, chart)
         self.add_button = Button(self, command=self.box.add_range, text='New Range')
 
     def pack(self, **kw):
