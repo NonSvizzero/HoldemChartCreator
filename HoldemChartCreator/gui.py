@@ -5,7 +5,7 @@ from tkinter.filedialog import askopenfile, asksaveasfile
 from HoldemChartCreator.hands import hands
 from HoldemChartCreator.draw import create_chart
 
-DEFAULT_BG = "#c5bd96"
+DEFAULT_BG = "#C5BD96"
 DEFAULT_FG = "#000000"
 DEFAULT_OUTPUT_WIDTH = 512
 DEFAULT_OUTPUT_HEIGHT = 512
@@ -25,29 +25,28 @@ class Cell(Button):
     def mouse_up(self):
         self.changed = False
 
-    def mouse_over(self, mode, bg_color, fg_color):
-        if not self.changed:
-            if mode == 0:
-                self.configure(bg=bg_color, state=NORMAL)
-            elif mode == 1:
-                self.configure(fg=fg_color, state=NORMAL)
-            else:
-                self.reset()
-        self.changed = True
+    def mouse_over(self, color):
+        if not self.changed and self['background'] != color:
+            self.configure(bg=color, state=NORMAL)
+            self.changed = True
+        else:
+            self.reset()
+            self.changed = False
 
     def reset(self):
         self.configure(bg=DEFAULT_BG, fg=DEFAULT_FG, state=DISABLED)
 
 
 class Chart(Frame):
-    def __init__(self, master=None, toolbox=None, **kw):
+    def __init__(self, master=None, **kw):
         super().__init__(master=master, background='black', **kw)
         self.cells = tuple(tuple(Cell(self, hand, bg=DEFAULT_BG, fg=DEFAULT_FG) for hand in row) for row in hands)
         self.mouse_pressed = False
-        self.toolbox = toolbox
         self.bind_all("<Button-1>", self.mouse_down)
         self.bind_all("<ButtonRelease-1>", self.mouse_up)
         self.bind_all("<B1-Motion>", self.mouse_motion)
+        self.toolbox = None
+        self.last = None
 
     def pack(self, **kw):
         super().pack(**kw)
@@ -79,16 +78,19 @@ class Chart(Frame):
             self.update_containing_cell(e)
 
     def update_containing_cell(self, e):
+        color = self.toolbox.range_container.box.active.button["background"]
         for row in self.cells:
             for cell in row:
-                if self.winfo_containing(e.x_root, e.y_root) is cell:
-                    pass  # todo
+                if self.winfo_containing(e.x_root, e.y_root) is cell and self.last is not cell:
+                    cell.mouse_over(color)
+                    self.toolbox.range_container.box.update_counters()
+                    self.last = cell
 
     def reset(self):
         for row in self.cells:
             for cell in row:
                 cell.reset()
-        self.toolbox.combo_counter.update_counter()
+        self.toolbox.range_container.box.update_counters()
 
     def preview_chart(self):
         img = create_chart(int(self.toolbox.width.var.get()), int(self.toolbox.height.var.get()), self.to_dict())
@@ -111,26 +113,26 @@ class Chart(Frame):
             for j, color in enumerate(row):
                 self.cells[i][j].configure(bg=color['bg'], fg=color['fg'],
                                            state=DISABLED if color['bg'] == DEFAULT_BG else NORMAL)
-        self.toolbox.combo_counter.update_counter()
+        self.toolbox.combo_counter.update_counters()
 
 
 class ComboCounter(Label):
     def __init__(self, master=None, **kw):
-        super().__init__(master=master, **kw)
+        super().__init__(master=master, width=20, **kw)
         self.counter = StringVar(self)
         self['textvariable'] = self.counter
         self.chart = None
 
-    def update_counter(self):
-        combos = self.master.count_combos()
+    def update_counter(self, combos):
         self.counter.set(f"{combos / 1326 * 100 :.2f}% ({combos} / 1326)")
 
 
-class ColorPicker(Frame):
+class Range(Frame):
     def __init__(self, master=None, text='Range', color='white', **kw):
         super().__init__(master=master, **kw)
         self.var = StringVar(self)
         self.entry = Entry(self, textvariable=self.var)
+        self.entry.bind("<1>", self.set_active)
         self.var.set(text)
         self.button = Button(self, command=self.pick_color, bg=color, relief=SUNKEN, width=8)
         self.counter = ComboCounter(self)
@@ -141,7 +143,11 @@ class ColorPicker(Frame):
         self.button.configure(bg=hex)
 
     def count_combos(self):
-        self.master.count_combos(self.button['background'])
+        combos = self.master.count_combos(self.button['background'])
+        self.counter.update_counter(combos)
+
+    def set_active(self, e):
+        self.master.active = self
 
     def pack(self, **kw):
         super().pack(**kw)
@@ -149,6 +155,7 @@ class ColorPicker(Frame):
         self.button.pack(side=LEFT, fill=X)
         self.counter.pack(side=LEFT)
         self.delete_button.pack(side=LEFT, fill=X)
+        self.counter.update_counter(0)
 
     def delete(self):
         self.master.remove_range(self)
@@ -156,22 +163,32 @@ class ColorPicker(Frame):
 class RangeBox(Frame):
     COLORS = ["#D10ECF", "#D71042", "#DB7412", "#B3E014", "#1EE516", "#1992EF", "#411BF4"]
 
-    def __init__(self, master=None, chart=None, **kw):
+    def __init__(self, master=None, **kw):
         super().__init__(master=master, **kw)
-        self.chart = chart
+        self.chart = None
         self.ranges= []
+        self.active = None
 
     def add_range(self):
         i = len(self.ranges)
-        self.ranges.append(ColorPicker(master=self, text=f"Range #{i+1}", color=self.COLORS[i % len(self.COLORS)]))
+        self.ranges.append(Range(master=self, text=f"Range #{i+1}", color=self.COLORS[i % len(self.COLORS)]))
         self.ranges[-1].pack()
+        self.active = self.ranges[-1]
 
     def remove_range(self, range):
+        if len(self.ranges) is 1:
+            return
         range.destroy()
         self.ranges.remove(range)
+        if self.active is range:
+            self.active = self.ranges[0]
 
     def count_combos(self, color):
-        self.chart.count_combos(color)
+        return self.chart.count_combos(color)
+
+    def update_counters(self):
+        for range in self.ranges:
+            range.count_combos()
 
     def update_color(self, old, new):
         self.chart.update_color(old, new)
@@ -181,9 +198,9 @@ class RangeBox(Frame):
         self.add_range()
 
 class RangeContainer(Frame):
-    def __init__(self, master=None, chart=None, **kw):
+    def __init__(self, master=None, **kw):
         super().__init__(master=master, **kw)
-        self.box = RangeBox(self, chart)
+        self.box = RangeBox(self)
         self.add_button = Button(self, command=self.box.add_range, text='New Range')
 
     def pack(self, **kw):
@@ -218,7 +235,6 @@ class FileHandler(Frame):
         self.save_button.pack(side=LEFT, fill=X)
         self.load_button.pack(side=RIGHT, fill=X)
 
-
 class LabeledEntry(Frame):
     def __init__(self, master=None, text="Text", value=0, **kw):
         super().__init__(master=master, **kw)
@@ -231,7 +247,6 @@ class LabeledEntry(Frame):
         super().pack(**kw)
         self.label.pack(side=LEFT)
         self.entry.pack(side=LEFT)
-
 
 class Toolbox(Frame):
     def __init__(self, master=None, **kw):
@@ -246,9 +261,6 @@ class Toolbox(Frame):
 
     def bind_widgets(self, chart):
         self.reset_button.configure(command=chart.reset)
-        self.export_button.configure(command=chart.preview_chart)
-        self.save_button.configure(command=chart.save_chart)
-        self.file_handler.chart = chart
 
     def pack(self, **kw):
         super().pack(**kw)
@@ -260,16 +272,25 @@ class Toolbox(Frame):
         self.export_button.pack(fill=X)
         self.save_button.pack(fill=X)
 
+def bind_widgets(chart, toolbox):
+    chart.toolbox = toolbox
+    toolbox.reset_button.configure(command=chart.reset)
+    toolbox.export_button.configure(command=chart.preview_chart)
+    toolbox.save_button.configure(command=chart.save_chart)
+    toolbox.file_handler.chart = chart
+    toolbox.range_container.box.chart = chart
+    toolbox.range_container.box.update_counters()
 
 def main():
     # WIDGETS
     root = Tk()
+    chart = Chart(root)
     tools = Toolbox(root)
-    chart = Chart(root, tools)
-    tools.bind_widgets(chart)
     # GEOMETRY
     chart.pack(side=LEFT)
     tools.pack(side=RIGHT)
+    # BINDING
+    bind_widgets(chart, tools)
 
     root.mainloop()
 
