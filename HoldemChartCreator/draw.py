@@ -1,9 +1,9 @@
 from PIL import Image, ImageDraw, ImageFont
 from HoldemChartCreator.hands import hands
 
-DEFAULT_BORDER = 5
+DEFAULT_BORDER = 3
 MIN_CELL_SIZE = 20
-CELL_PADDING_PERCENTAGE = 0.1
+CELL_PADDING_PERCENTAGE = 0.2
 
 
 def create_chart(width, height, colors, bd=DEFAULT_BORDER, bg='black'):
@@ -19,11 +19,11 @@ def create_chart(width, height, colors, bd=DEFAULT_BORDER, bg='black'):
             SE = (margin_l + (cell_w + bd) * (j + 1), margin_t + (cell_h + bd) * (i + 1))
             draw.rectangle((NW, SE), fill=color['bg'])
             if i == j:
-                text_offset = NW[0] + int(CELL_PADDING_PERCENTAGE * 2.5 * cell_w), \
-                              NW[1] + int(CELL_PADDING_PERCENTAGE * 2.5 * cell_h)
+                text_offset = NW[0] + int(0.25 * cell_w), \
+                              NW[1] + int(0.35 * cell_h)
             else:
-                text_offset = NW[0] + int(CELL_PADDING_PERCENTAGE * cell_w), \
-                              NW[1] + int(CELL_PADDING_PERCENTAGE * 2.5 * cell_h)
+                text_offset = NW[0] + int(0.18 * cell_w), \
+                              NW[1] + int(0.35 * cell_h)
             draw.text(text_offset, hand, font=font, fill=color['fg'])
     return img
 

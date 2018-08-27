@@ -142,9 +142,10 @@ class Range(Frame):
         (RGB, hex) = askcolor()
         self.button.configure(bg=hex)
 
-    def count_combos(self):
+    def count_combos(self, previous=0):
         combos = self.master.count_combos(self.button['background'])
-        self.counter.update_counter(combos)
+        self.counter.update_counter(previous + combos)
+        return previous + combos
 
     def set_active(self, e):
         self.master.active = self
@@ -186,9 +187,12 @@ class RangeBox(Frame):
     def count_combos(self, color):
         return self.chart.count_combos(color)
 
-    def update_counters(self):
+    def update_counters(self, e=None):
+        prev = 0
         for range in self.ranges:
-            range.count_combos()
+            curr = range.count_combos(prev)
+            if self.master.merge.get():
+                prev = curr
 
     def update_color(self, old, new):
         self.chart.update_color(old, new)
@@ -202,11 +206,15 @@ class RangeContainer(Frame):
         super().__init__(master=master, **kw)
         self.box = RangeBox(self)
         self.add_button = Button(self, command=self.box.add_range, text='New Range')
+        self.merge = IntVar()
+        self.check_button = Checkbutton(self, text="Cumulate Ranges", var=self.merge)
+        self.check_button.bind("<ButtonRelease-1>", self.box.update_counters)
 
     def pack(self, **kw):
         super().pack(**kw)
         self.box.pack()
         self.add_button.pack(fill=X)
+        self.check_button.pack(fill=X)
 
 class FileHandler(Frame):
     def __init__(self, master=None, chart=None, **kw):
