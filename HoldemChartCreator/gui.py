@@ -93,11 +93,13 @@ class Chart(Frame):
         self.toolbox.range_container.box.update_counters()
 
     def preview_chart(self):
-        img = create_chart(int(self.toolbox.width.var.get()), int(self.toolbox.height.var.get()), self.to_dict())
+        img = create_chart(int(self.toolbox.width.var.get()), int(self.toolbox.height.var.get()), self.to_json(),
+                           self.toolbox.range_container.to_json())
         img.show()
 
     def save_chart(self):
-        img = create_chart(int(self.toolbox.width.var.get()), int(self.toolbox.height.var.get()), self.to_dict())
+        img = create_chart(int(self.toolbox.width.var.get()), int(self.toolbox.height.var.get()), self.to_json(),
+                           self.toolbox.range_container.to_json())
         f = asksaveasfile(mode='wb', defaultextension='png')
         if f is None:
             return
@@ -105,7 +107,7 @@ class Chart(Frame):
         f.close()
 
 
-    def to_dict(self):
+    def to_json(self):
         return [[{"fg": cell['fg'], "bg": cell['bg']} for cell in row] for row in self.cells]
 
     def load_colors(self, colors):
@@ -119,11 +121,13 @@ class Chart(Frame):
 class ComboCounter(Label):
     def __init__(self, master=None, **kw):
         super().__init__(master=master, width=20, **kw)
+        self.percentage = 0
         self.counter = StringVar(self)
         self['textvariable'] = self.counter
         self.chart = None
 
     def update_counter(self, combos):
+        self.percentage = combos / 1326 * 100
         self.counter.set(f"{combos / 1326 * 100 :.2f}% ({combos} / 1326)")
 
 
@@ -216,6 +220,10 @@ class RangeContainer(Frame):
         self.add_button.pack(fill=X)
         self.check_button.pack(fill=X)
 
+    def to_json(self):
+        return [{'name': f"{range.var.get()} ({range.counter.percentage : .2f}%)", 'color': range.button['background']}
+                for range in self.box.ranges]
+
 class FileHandler(Frame):
     def __init__(self, master=None, chart=None, **kw):
         super().__init__(master=master, **kw)
@@ -227,7 +235,7 @@ class FileHandler(Frame):
         f = asksaveasfile(defaultextension='.json')
         if f is None:
             return
-        json.dump(self.chart.to_dict(), f)
+        json.dump(self.chart.to_json(), f)
         f.close()
 
     def load(self):

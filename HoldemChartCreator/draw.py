@@ -4,11 +4,22 @@ from HoldemChartCreator.hands import hands
 DEFAULT_BORDER = 3
 MIN_CELL_SIZE = 20
 CELL_PADDING_PERCENTAGE = 0.2
+CHART_MARGIN = 10
+RANGES_PADDING_TOP = 10
+RANGES_SCALE_X = 0.6
+RANGE_SIZE_RATIO = 0.15
+TEXT_MARGIN = 5
+RANGE_HEIGHT = 40
 
-
-def create_chart(width, height, colors, bd=DEFAULT_BORDER, bg='black'):
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+def create_chart(width, height, colors, ranges, bd=DEFAULT_BORDER, bg='black'):
+    img = Image.new("RGBA", (int(width * (1 + RANGES_SCALE_X)), height), (255, 255, 255, 255))
     draw = ImageDraw.Draw(img)
+    draw_chart(bd, bg, colors, draw, height, width)
+    draw_ranges(draw, ranges, width + CHART_MARGIN, RANGES_PADDING_TOP, width * RANGES_SCALE_X - CHART_MARGIN * 2)
+    return img
+
+
+def draw_chart(bd, bg, colors, draw, height, width):
     margin_l, cell_w, margin_r = calculate_boundaries(width, bd=bd)
     margin_t, cell_h, margin_b = calculate_boundaries(height, bd=bd)
     font = scale_font(min(cell_h, cell_w) * (1 - 2 * CELL_PADDING_PERCENTAGE))
@@ -25,8 +36,15 @@ def create_chart(width, height, colors, bd=DEFAULT_BORDER, bg='black'):
                 text_offset = NW[0] + int(0.18 * cell_w), \
                               NW[1] + int(0.35 * cell_h)
             draw.text(text_offset, hand, font=font, fill=color['fg'])
-    return img
 
+
+def draw_ranges(draw, ranges, x, y, w):
+    longest = max((range['name'] for range in ranges), key=len)
+    for i, range in enumerate(ranges):
+        font = scale_font(w * (1 - RANGE_SIZE_RATIO * 1.5), text=longest)
+        box_x, box_y = x, y + (RANGES_PADDING_TOP + RANGE_HEIGHT) * i
+        draw.rectangle((box_x, box_y, box_x + w * RANGE_SIZE_RATIO, box_y + w * RANGE_SIZE_RATIO), fill=range['color'], outline="black")
+        draw.text((box_x + w * RANGE_SIZE_RATIO + TEXT_MARGIN, box_y), range['name'], font=font, fill='black')
 
 def calculate_boundaries(size, bd=DEFAULT_BORDER):
     x = int((size - bd) / 13) - bd
@@ -37,10 +55,10 @@ def calculate_boundaries(size, bd=DEFAULT_BORDER):
     return l, x, r
 
 
-def scale_font(size, font="consola.ttf"):
+def scale_font(size, text="XXx", font="consola.ttf"):
     x = 1
     f = ImageFont.truetype(font, x)
-    while f.getsize("XXx")[0] < size:
+    while f.getsize(text)[0] < size:
         x += 1
         f = ImageFont.truetype(font, x)
     return f
